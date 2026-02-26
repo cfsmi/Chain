@@ -19,7 +19,7 @@ let playerCount = 0;
 task.spawn(() => {
     while (true) {
         task.wait(5);
-        playerCount = math.random(1, 50);
+        playerCount = math.random(1, 10);
         ChainFramework.SetServerState("playerCount", playerCount);
     }
 });
