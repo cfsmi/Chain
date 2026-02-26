@@ -1052,6 +1052,84 @@ export class Chain {
     }
 
     /**
+     * Link class - Universal module template
+     */
+    public static link = class Link {
+        protected Framework: Chain;
+        protected ModuleName: string;
+        protected IsServer: boolean;
+        protected IsClient: boolean;
+        Dependencies?: string[];
+        Inject?: Record<string, string>;
+        [key: string]: unknown;
+
+        constructor(framework: Chain, moduleName: string) {
+            this.Framework = framework;
+            this.ModuleName = moduleName;
+            this.IsServer = RunService.IsServer();
+            this.IsClient = RunService.IsClient();
+        }
+
+        protected Log(level: number, message: string, metadata?: Record<string, unknown>) {
+            this.Framework.Log(level, message, this.ModuleName, metadata);
+        }
+
+        protected Publish(topic: string, data: unknown) {
+            this.Framework.Publish(topic, data, this.ModuleName);
+        }
+
+        protected Subscribe(topic: string, callback: (message: any) => void) {
+            return this.Framework.Subscribe(topic, callback);
+        }
+
+        protected SetState<T>(key: string, value: T) {
+            this.Framework.SetState(key, value);
+        }
+
+        protected GetState<T>(key: string): T | undefined {
+            return this.Framework.GetState<T>(key);
+        }
+
+        protected NetworkRequest<T, R>(channel: string, data: T, target?: Player): Promise<R> {
+            return this.Framework.NetworkRequest<T, R>(channel, data, undefined, target);
+        }
+
+        protected SendToServer(channel: string, data: unknown): boolean {
+            return this.Framework.SendToServer(channel, data);
+        }
+
+        protected SendToClient(player: Player, channel: string, data: unknown): boolean {
+            return this.Framework.SendToClient(player, channel, data);
+        }
+
+        protected SendToAllClients(channel: string, data: unknown): boolean {
+            return this.Framework.SendToAllClients(channel, data);
+        }
+
+        protected ConnectToChannel<T>(channel: string, callback: (data: T) => void) {
+            return this.Framework.ConnectToChannel<T>(channel, callback);
+        }
+
+        protected ServerOnly<T>(fn: () => T): T | undefined {
+            if (this.IsServer) {
+                return fn();
+            }
+            return undefined;
+        }
+
+        protected ClientOnly<T>(fn: () => T): T | undefined {
+            if (this.IsClient) {
+                return fn();
+            }
+            return undefined;
+        }
+
+        Init?(): void;
+        OnStart?(): void;
+        OnShutdown?(): void;
+    };
+
+    /**
      * Reset all mocks for clean testing
      */
     public ResetMocks() {

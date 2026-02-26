@@ -1,13 +1,12 @@
-import { BaseService } from "../Architecture";
 import { Chain } from "../Chain";
 
-export default class PlayerService extends BaseService {
+export default class PlayerService extends Chain.link {
     Dependencies = ["Sample"];
     Inject = {
         SampleService: "Sample"
     };
 
-    private SampleService?: BaseService;
+    private SampleService?: typeof Chain.link
     private playerCount = 0;
 
     public Init() {
