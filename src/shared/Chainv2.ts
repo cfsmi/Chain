@@ -99,6 +99,10 @@ interface IModule {
     [key: string]: unknown;
 }
 
+interface IModuleConstructor {
+    new (framework: Chain, moduleName: string): IModule;
+}
+
 export enum LogLevel {
     DEBUG = 0,
     INFO = 1,
@@ -147,9 +151,9 @@ interface Config {
     [key: string]: unknown;
 }
 
-/**
- * TestChain extends the base Chain with testing capabilities and enhanced features
- */
+/*
+This class handles the main section of most of chains features
+*/
 export class Chain {
     private Modules = new Map<string, IModule>();
     private ModuleCache = new Map<string, IModule>();
@@ -705,7 +709,7 @@ export class Chain {
     }
 
     /**
-     * Load modules with performance tracking
+     * Load modules with performance tracking and automatic instantiation
      */
     public LoadModules(path: Instance): Array<{ moduleName: string; error: string }> {
         const errors: Array<{ moduleName: string; error: string }> = [];
@@ -718,12 +722,17 @@ export class Chain {
                     }
                     const startTime = tick();
                     try {
-                        const module = require(child) as IModule;
-                        if (typeOf(module) !== "table") throw "Invalid module";
-                        this.Modules.set(child.Name, module);
+                        const ModuleClass = require(child) as new (framework: Chain, moduleName: string) => IModule;
+                        if (typeOf(ModuleClass) !== "function") throw "Module must export a class constructor";
+                        
+                        // Automatically instantiate the module with framework and module name
+                        const moduleInstance = new ModuleClass(this, child.Name);
+                        if (typeOf(moduleInstance) !== "table") throw "Invalid module instance";
+                        
+                        this.Modules.set(child.Name, moduleInstance);
                         const loadTime = tick() - startTime;
                         this.ModulePerformance.set(child.Name, { initTime: 0, startTime: loadTime });
-                        this.Log(LogLevel.DEBUG, `Loaded module: ${child.Name} (${math.floor(loadTime * 1000)}ms)`, "TestChain");
+                        this.Log(LogLevel.DEBUG, `Loaded and instantiated module: ${child.Name} (${math.floor(loadTime * 1000)}ms)`, "TestChain");
                     } catch (e) {
                         errors.push({ moduleName: child.Name, error: tostring(e) });
                         this.Log(LogLevel.ERROR, `Failed to load module: ${child.Name} - ${e}`, "TestChain");

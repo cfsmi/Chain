@@ -40,6 +40,85 @@ const initErrors = await chain.Init();
 const startErrors = await chain.Enchain();
 ```
 
+## Automatic Module Loading
+
+The Chain framework automatically loads all modules and provides the necessary dependencies (framework instance and module name) to each module's constructor.
+
+### How It Works
+
+1. **Automatic Instantiation**: When you call `ChainFramework.LoadModules()`, the framework automatically:
+   - Requires each ModuleScript
+   - Instantiates the module class with `new ModuleClass(framework, moduleName)`
+   - Provides the framework instance and module name automatically
+
+2. **Default Export Required**: Modules must use `export default class` instead of named exports or `export =`
+
+### Module Template
+
+```typescript
+import { BaseService } from "../Architecture";
+import { Chain } from "../Chainv2";
+
+export default class YourService extends BaseService {
+    Dependencies = ["OtherService"]; // Optional: List dependencies
+    Inject = {
+        OtherService: "OtherService"  // Optional: Inject dependencies
+    };
+
+    private OtherService?: BaseService; // Optional: Type the injected dependency
+
+    constructor(framework: Chain, moduleName: string) {
+        super(framework, moduleName); // Required: Call parent constructor
+    }
+
+    Init() {
+        this.Log(1, "Service initialized");
+        // Initialization logic here
+    }
+
+    OnStart() {
+        this.Log(1, "Service started");
+        // Startup logic here
+    }
+
+    OnShutdown() {
+        this.Log(1, "Service shutting down");
+        // Cleanup logic here
+    }
+}
+```
+
+### Benefits
+
+- **No Manual Instantiation**: Framework handles all module creation
+- **Automatic Dependencies**: Framework and module name are provided automatically
+- **Consistent Pattern**: All modules follow the same structure
+- **Type Safety**: Full TypeScript support with proper typing
+- **Dependency Injection**: Automatic injection of other modules as dependencies
+
+### Migration from Old System
+
+If you have existing modules using the old pattern:
+
+**Old Pattern:**
+```typescript
+class MyModule extends BaseService {
+    Init() { /* ... */ }
+}
+export = MyModule;
+```
+
+**New Pattern:**
+```typescript
+export default class MyModule extends BaseService {
+    constructor(framework: Chain, moduleName: string) {
+        super(framework, moduleName);
+    }
+    
+    Init() { /* ... */ }
+}
+```
+
 ## Module System
 
 ### Creating Modules
