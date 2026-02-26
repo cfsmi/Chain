@@ -205,70 +205,8 @@ export default class ChatSystem extends Chain.link {
 }
 ```
 
-### Benefits of Chain.link
 
-1. **Universal**: Works on both server and client with automatic detection
-2. **Unified API**: Single interface for all module types
-3. **Built-in Networking**: Bidirectional communication methods included
-4. **Environment Helpers**: Easy server/client-specific code execution
-5. **Full Framework Access**: All Chain framework features available
-6. **Type Safety**: Full TypeScript support with proper typing
-7. **Dependency Injection**: Automatic injection of other modules
-8. **Lifecycle Management**: Proper initialization and cleanup hooks
 
-### Migration from Architecture Classes
-
-If you're migrating from the old BaseService, BaseController, or SharedModule classes:
-
-**Before:**
-```typescript
-import { BaseService } from "../Architecture";
-
-export default class MyService extends BaseService {
-    // ...
-}
-```
-
-**After:**
-```typescript
-import { Chain } from "../Chain";
-
-export default class MyService extends Chain.link {
-    // Same code, but now works everywhere!
-}
-```
-
-The API is identical, but Chain.link provides more functionality and works in all environments.
-
-## Module System
-
-### Creating Modules
-
-```typescript
-interface IModule {
-    Init?: () => void;
-    OnStart?: () => void;
-    OnShutdown?: () => void;
-    Dependencies?: string[];
-    Inject?: Record<string, string>;
-}
-
-// Example module
-export const PlayerService: IModule = {
-    Dependencies: ["DataService"],
-    Inject: {
-        dataService: "DataService"
-    },
-    
-    Init() {
-        print("PlayerService initialized");
-    },
-    
-    OnStart() {
-        print("PlayerService started");
-    }
-};
-```
 
 ### Module Lifecycle
 
@@ -539,15 +477,7 @@ const stats = chain.GetNetworkStats();
 print(`Sent: ${stats.sent}, Received: ${stats.received}, Errors: ${stats.errors}`);
 ```
 
-## Example Usage
 
-See [ExampleTestModule.ts](src/shared/ExampleTestModule.ts) for comprehensive usage examples including:
-
-- Network operation testing
-- State management testing  
-- Event bus testing
-- Module mocking
-- Async operation testing
 
 ## API Reference
 
