@@ -201,29 +201,40 @@ export class Chain {
     private Started = false;
 
     constructor() {
-        this.Network.OnClientEvent.Connect((payload: string) => {
-            try {
-                const decoded = HttpService.JSONDecode(payload) as NetworkResponse;
-                this.NetworkStats.received++;
+        // Handle both client and server events
+        if (RunService.IsClient()) {
+            this.Network.OnClientEvent.Connect((payload: string) => {
+                this.handleNetworkMessage(payload);
+            });
+        } else {
+            this.Network.OnServerEvent.Connect((player: Player, ...args: unknown[]) => {
+                this.handleNetworkMessage(args[0] as string, player);
+            });
+        }
+    }
+
+    private handleNetworkMessage(payload: string, player?: Player) {
+        try {
+            const decoded = HttpService.JSONDecode(payload) as NetworkResponse;
+            this.NetworkStats.received++;
+            
+            if (decoded.id && this.PendingRequests.has(decoded.id)) {
+                const request = this.PendingRequests.get(decoded.id)!;
+                this.PendingRequests.delete(decoded.id);
                 
-                if (decoded.id && this.PendingRequests.has(decoded.id)) {
-                    const request = this.PendingRequests.get(decoded.id)!;
-                    this.PendingRequests.delete(decoded.id);
-                    
-                    if (decoded.success) {
-                        request.resolve(decoded.data);
-                    } else {
-                        request.reject(decoded.error || "Unknown error");
-                    }
+                if (decoded.success) {
+                    request.resolve(decoded.data);
                 } else {
-                    const signal = this.Channels.get(decoded.id);
-                    if (signal) signal.Fire(decoded.data);
+                    request.reject(decoded.error || "Unknown error");
                 }
-            } catch (error) {
-                this.NetworkStats.errors++;
-                this.Log(LogLevel.ERROR, `Network decode error: ${error}`, "TestChain");
+            } else {
+                const signal = this.Channels.get(decoded.id);
+                if (signal) signal.Fire(decoded.data);
             }
-        });
+        } catch (error) {
+            this.NetworkStats.errors++;
+            this.Log(LogLevel.ERROR, `Network decode error: ${error}`, "TestChain");
+        }
     }
 
     /**
@@ -267,9 +278,9 @@ export class Chain {
     }
 
     /**
-     * Type-safe network request with timeout
+     * Type-safe network request with timeout (bidirectional)
      */
-    public NetworkRequest<T = unknown, R = unknown>(channel: string, data: T, timeout = this.NETWORK_TIMEOUT): Promise<R> {
+    public NetworkRequest<T = unknown, R = unknown>(channel: string, data: T, timeout = this.NETWORK_TIMEOUT, target?: Player): Promise<R> {
         return new Promise((resolve, reject) => {
             const id = HttpService.GenerateGUID(false);
             const request: NetworkRequest<T> = {
@@ -287,7 +298,17 @@ export class Chain {
 
             try {
                 const payload = HttpService.JSONEncode(request);
-                this.Network.FireServer(payload);
+                
+                if (RunService.IsServer()) {
+                    if (target) {
+                        this.Network.FireClient(target, payload);
+                    } else {
+                        this.Network.FireAllClients(payload);
+                    }
+                } else {
+                    this.Network.FireServer(payload);
+                }
+                
                 this.NetworkStats.sent++;
                 
                 task.wait(timeout / 1000);
@@ -557,12 +578,12 @@ export class Chain {
     }
 
     /**
-     * Broadcast server state to all clients
+     * Broadcast server state to all clients or specific client
      */
-    private BroadcastServerState(key: string, value: unknown) {
+    private BroadcastServerState(key: string, value: unknown, target?: Player) {
         if (!RunService.IsServer()) return;
         
-        this.FireNetwork("__serverStateUpdate", { key, value });
+        this.FireNetwork("__serverStateUpdate", { key, value }, target);
     }
 
     /**
@@ -677,33 +698,63 @@ export class Chain {
             }
         }
         if (RunService.IsClient()) {
-            const Remote = this.NetworkFolder.FindFirstChild(Id) as RemoteFunction;
-            if (Remote) {
-                return Remote;
-            } else {
+            if (!this.NetworkFolder.FindFirstChild(Id)) {
                 this.RegisteredFunctions.set(Id, Callback);
+                // Create RemoteFunction for client-to-server calls
+                const RemoteFunction: RemoteFunction = new Instance("RemoteFunction");
+                RemoteFunction.Name = Id;
+                RemoteFunction.OnClientInvoke = (...args: unknown[]) => {
+                    return Callback(...args);
+                };
+                RemoteFunction.Parent = this.NetworkFolder;
+            } else {
+                const Remote = this.NetworkFolder.FindFirstChild(Id) as RemoteFunction;
+                if (Remote) {
+                    return Remote;
+                } else {
+                    this.RegisteredFunctions.set(Id, Callback);
+                }
             }
         }
     }
 
-    public GetRegisteredMethod(Id: string, args: unknown): Promise<unknown> | Callback | undefined {
+    public GetRegisteredMethod<R = unknown>(Id: string, args: unknown, target?: Player): Promise<R> | Callback | undefined {
         if (RunService.IsClient()) {
             if (!this.NetworkFolder.FindFirstChild(Id)) {
                 this.Log(LogLevel.WARN, `Method with id: ${Id} is not registered`, "TestChain");
-                return Promise.reject(`Method with id: ${Id} is not registered`);
+                return Promise.reject(`Method with id: ${Id} is not registered`) as Promise<R>;
             }
             const Remote = this.NetworkFolder.FindFirstChild(Id) as RemoteFunction;
-            return new Promise((resolve, reject) => {
+            return new Promise<R>((resolve, reject) => {
                 try {
-                    const result = Remote.InvokeServer(args);
+                    const result = Remote.InvokeServer(args) as R;
                     resolve(result);
                 } catch (error) {
                     reject(error);
                 }
             });
-        } else {
-            if (this.RegisteredFunctions.has(Id)) {
-                return this.RegisteredFunctions.get(Id);
+        } else if (RunService.IsServer()) {
+            if (target) {
+                // Server calling client method
+                const Remote = this.NetworkFolder.FindFirstChild(Id) as RemoteFunction;
+                if (Remote) {
+                    return new Promise<R>((resolve, reject) => {
+                        try {
+                            const result = Remote.InvokeClient(target, args) as R;
+                            resolve(result);
+                        } catch (error) {
+                            reject(error);
+                        }
+                    });
+                } else {
+                    this.Log(LogLevel.WARN, `Method with id: ${Id} is not registered`, "TestChain");
+                    return Promise.reject(`Method with id: ${Id} is not registered`) as Promise<R>;
+                }
+            } else {
+                // Server calling local method
+                if (this.RegisteredFunctions.has(Id)) {
+                    return this.RegisteredFunctions.get(Id);
+                }
             }
         }
     }
@@ -861,9 +912,9 @@ export class Chain {
     }
 
     /**
-     * Fire network event with rate limiting
+     * Fire network event with rate limiting (bidirectional)
      */
-    public FireNetwork(channel: string, data: unknown): boolean {
+    public FireNetwork(channel: string, data: unknown, target?: Player): boolean {
         const now = tick();
         const lastCall = this.RateLimitMap.get(channel) ?? 0;
         if (now - lastCall < this.RATE_WINDOW / this.RATE_LIMIT) {
@@ -873,7 +924,17 @@ export class Chain {
         this.RateLimitMap.set(channel, now);
         try {
             const payload = HttpService.JSONEncode({ Channel: channel, data });
-            this.Network.FireServer(payload);
+            
+            if (RunService.IsServer()) {
+                if (target) {
+                    this.Network.FireClient(target, payload);
+                } else {
+                    this.Network.FireAllClients(payload);
+                }
+            } else {
+                this.Network.FireServer(payload);
+            }
+            
             this.NetworkStats.sent++;
             return true;
         } catch (e) {
@@ -884,6 +945,60 @@ export class Chain {
         }
     }
 
+    /**
+     * Send message to specific client (server-side only)
+     */
+    public SendToClient(player: Player, channel: string, data: unknown): boolean {
+        if (!RunService.IsServer()) {
+            this.Log(LogLevel.WARN, "SendToClient can only be called on server", "TestChain");
+            return false;
+        }
+        return this.FireNetwork(channel, data, player);
+    }
+
+    /**
+     * Send message to all clients (server-side only)
+     */
+    public SendToAllClients(channel: string, data: unknown): boolean {
+        if (!RunService.IsServer()) {
+            this.Log(LogLevel.WARN, "SendToAllClients can only be called on server", "TestChain");
+            return false;
+        }
+        return this.FireNetwork(channel, data);
+    }
+
+    /**
+     * Send message to server (client-side only)
+     */
+    public SendToServer(channel: string, data: unknown): boolean {
+        if (!RunService.IsClient()) {
+            this.Log(LogLevel.WARN, "SendToServer can only be called on client", "TestChain");
+            return false;
+        }
+        return this.FireNetwork(channel, data);
+    }
+
+    /**
+     * Request data from specific client (server-side only)
+     */
+    public RequestFromClient<T = unknown, R = unknown>(player: Player, channel: string, data: T, timeout?: number): Promise<R> {
+        if (!RunService.IsServer()) {
+            this.Log(LogLevel.WARN, "RequestFromClient can only be called on server", "TestChain");
+            return Promise.reject("RequestFromClient can only be called on server") as Promise<R>;
+        }
+        return this.NetworkRequest<T, R>(channel, data, timeout, player);
+    }
+
+    /**
+     * Request data from server (client-side only)
+     */
+    public RequestFromServer<T = unknown, R = unknown>(channel: string, data: T, timeout?: number): Promise<R> {
+        if (!RunService.IsClient()) {
+            this.Log(LogLevel.WARN, "RequestFromServer can only be called on client", "TestChain");
+            return Promise.reject("RequestFromServer can only be called on client") as Promise<R>;
+        }
+        return this.NetworkRequest<T, R>(channel, data, timeout);
+    }
     /**
      * Test helper: Wait for condition with timeout
      */

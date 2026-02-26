@@ -58,6 +58,22 @@ export abstract class BaseService implements IService {
     protected GetState<T>(key: string): T | undefined {
         return this.Framework.GetState<T>(key);
     }
+
+    protected NetworkRequest<T, R>(channel: string, data: T, target?: Player): Promise<R> {
+        return this.Framework.NetworkRequest<T, R>(channel, data, undefined, target);
+    }
+
+    protected SendToClient(player: Player, channel: string, data: unknown): boolean {
+        return this.Framework.SendToClient(player, channel, data);
+    }
+
+    protected SendToAllClients(channel: string, data: unknown): boolean {
+        return this.Framework.SendToAllClients(channel, data);
+    }
+
+    protected ConnectToChannel<T>(channel: string, callback: (data: T) => void) {
+        return this.Framework.ConnectToChannel<T>(channel, callback);
+    }
 }
 
 /**
@@ -93,8 +109,16 @@ export abstract class BaseController implements IController {
         return this.Framework.GetState<T>(key);
     }
 
-    protected NetworkRequest<T, R>(channel: string, data: T): Promise<R> {
-        return this.Framework.NetworkRequest<T, R>(channel, data);
+    protected NetworkRequest<T, R>(channel: string, data: T, target?: Player): Promise<R> {
+        return this.Framework.NetworkRequest<T, R>(channel, data, undefined, target);
+    }
+
+    protected SendToServer(channel: string, data: unknown): boolean {
+        return this.Framework.SendToServer(channel, data);
+    }
+
+    protected ConnectToChannel<T>(channel: string, callback: (data: T) => void) {
+        return this.Framework.ConnectToChannel<T>(channel, callback);
     }
 }
 
@@ -132,6 +156,26 @@ export abstract class SharedModule {
 
     protected GetState<T>(key: string): T | undefined {
         return this.Framework.GetState<T>(key);
+    }
+
+    protected NetworkRequest<T, R>(channel: string, data: T, target?: Player): Promise<R> {
+        return this.Framework.NetworkRequest<T, R>(channel, data, undefined, target);
+    }
+
+    protected SendToServer(channel: string, data: unknown): boolean {
+        return this.Framework.SendToServer(channel, data);
+    }
+
+    protected SendToClient(player: Player, channel: string, data: unknown): boolean {
+        return this.Framework.SendToClient(player, channel, data);
+    }
+
+    protected SendToAllClients(channel: string, data: unknown): boolean {
+        return this.Framework.SendToAllClients(channel, data);
+    }
+
+    protected ConnectToChannel<T>(channel: string, callback: (data: T) => void) {
+        return this.Framework.ConnectToChannel<T>(channel, callback);
     }
 
     // Server-only methods
