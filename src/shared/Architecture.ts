@@ -1,5 +1,5 @@
 import { RunService } from "@rbxts/services";
-import { Chain } from "./Chainv2";
+import { Chain } from "./Chain";
 
 export interface IService {
     Init?(): void;

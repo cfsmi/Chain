@@ -1,9 +1,7 @@
-import { Chain } from "shared/Chainv2";
-import { ExampleTestModule } from "shared/TestModule"
+import { Chain } from "shared/Chain";
+
 import { ReplicatedStorage } from "@rbxts/services";
 print("Server is running")
-const tests = new ExampleTestModule();
-tests.runAllTests()
 const ChainFramework = new Chain();
 ChainFramework.LoadModules(ReplicatedStorage.FindFirstChild("Modules")!);
 ChainFramework.Init();  // Injects dependencies & calls Init()

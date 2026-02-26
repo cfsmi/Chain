@@ -1,4 +1,4 @@
-import { Chain } from "shared/Chainv2";
+import { Chain } from "shared/Chain";
 print("Client is running")
 const framework = new Chain();
 framework.Init();

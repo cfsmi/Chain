@@ -1,5 +1,5 @@
 import { SharedModule } from "../Architecture";
-import { Chain } from "../Chainv2";
+import { Chain } from "../Chain";
 
 export default class ExampleSharedModule extends SharedModule {
     Dependencies = ["OtherModule"];

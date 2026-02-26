@@ -1,5 +1,5 @@
 import { BaseService } from "../Architecture";
-import { Chain } from "../Chainv2";
+import { Chain } from "../Chain";
 
 export default class ExampleService extends BaseService {
     Dependencies = ["OtherService"];
