@@ -4,14 +4,14 @@ A powerful, feature-rich framework for Roblox TypeScript development with advanc
 
 ## Features
 
-- 🔧 **Module Management** - Dependency injection, lifecycle management, and performance tracking
-- 🌐 **Network Layer** - Type-safe networking with rate limiting and timeout handling
-- 🧪 **Testing Suite** - Built-in testing framework with mocking capabilities
-- 📊 **State Management** - Reactive state with history tracking and time-travel debugging
-- 📡 **Event Bus** - Global publish/subscribe system with filtering
-- ⚙️ **Configuration** - Dynamic configuration management with watchers
-- 📝 **Logging** - Multi-level logging system with filtering and metadata
-- 🔍 **Debugging** - Performance monitoring and comprehensive error tracking
+- **Module Management** - Dependency injection, lifecycle management, and performance tracking
+- **Network Layer** - Type-safe networking with rate limiting and timeout handling
+- **Testing Suite** - Built-in testing framework with mocking capabilities
+- **State Management** - Reactive state with history tracking and time-travel debugging
+- **Event Bus** - Global publish/subscribe system with filtering
+- **Configuration** - Dynamic configuration management with watchers
+- **Logging** - Multi-level logging system with filtering and metadata
+- **Debugging** - Performance monitoring and comprehensive error tracking
 
 ## Installation
 
