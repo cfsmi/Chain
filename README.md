@@ -20,14 +20,14 @@ Download this project, as long as you have roblox typescript setup, it should wo
 ## Quick Start
 
 ```typescript
-import { Chain, LogLevel } from "./Chainv2";
+import { Chain } from "./Chain";
 
 // Initialize Chain
 const chain = new Chain();
 
 // Enable test mode for development
 chain.EnableTestMode();
-chain.SetLogLevel(LogLevel.DEBUG);
+chain.SetLogLevel(1);
 
 // Load configuration
 chain.LoadConfig({

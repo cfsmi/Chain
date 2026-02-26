@@ -1,9 +1,9 @@
 import { Chain } from "shared/Chain";
-
 import { ReplicatedStorage } from "@rbxts/services";
 print("Server is running")
 const ChainFramework = new Chain();
 ChainFramework.LoadModules(ReplicatedStorage.FindFirstChild("Modules")!);
+ChainFramework.SetLogLevel(1)
 ChainFramework.Init();  // Injects dependencies & calls Init()
 ChainFramework.Enchain(); // Calls OnStart() on all modules
 
