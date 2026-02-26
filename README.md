@@ -54,70 +54,191 @@ The Chain framework automatically loads all modules and provides the necessary d
 2. **Default Export Required**: Modules must use `export default class` instead of named exports or `export =`
 
 ### Module Template
+## Chain.link - Universal Module Template
+
+Chain.link is a unified module template that combines the functionality of services, controllers, and shared modules into a single, powerful base class. It automatically detects whether it's running on the server or client and provides appropriate functionality for both environments.
+
+### Basic Usage
 
 ```typescript
-import { BaseService } from "../Architecture";
-import { Chain } from "../Chainv2";
+import { Chain } from "../Chain";
 
-export default class YourService extends BaseService {
-    Dependencies = ["OtherService"]; // Optional: List dependencies
+export default class MyModule extends Chain.link {
+    Dependencies = ["OtherModule"];
     Inject = {
-        OtherService: "OtherService"  // Optional: Inject dependencies
+        OtherModule: "OtherModule"
     };
 
-    private OtherService?: BaseService; // Optional: Type the injected dependency
-
-    constructor(framework: Chain, moduleName: string) {
-        super(framework, moduleName); // Required: Call parent constructor
-    }
+    private OtherModule?: typeof Chain.link;
 
     Init() {
-        this.Log(1, "Service initialized");
-        // Initialization logic here
+        this.Log(1, "Module initialized");
+        
+        // Server-only initialization
+        this.ServerOnly(() => {
+            this.Log(1, "Server-side initialization");
+            this.SetupServerLogic();
+        });
+
+        // Client-only initialization
+        this.ClientOnly(() => {
+            this.Log(1, "Client-side initialization");
+            this.SetupClientUI();
+        });
     }
 
     OnStart() {
-        this.Log(1, "Service started");
-        // Startup logic here
+        this.Log(1, "Module started");
     }
 
     OnShutdown() {
-        this.Log(1, "Service shutting down");
-        // Cleanup logic here
+        this.Log(1, "Module shutting down");
+    }
+
+    private SetupServerLogic() {
+        // Server-specific code
+    }
+
+    private SetupClientUI() {
+        // Client-specific code
     }
 }
 ```
 
-### Benefits
+### Available Properties
 
-- **No Manual Instantiation**: Framework handles all module creation
-- **Automatic Dependencies**: Framework and module name are provided automatically
-- **Consistent Pattern**: All modules follow the same structure
-- **Type Safety**: Full TypeScript support with proper typing
-- **Dependency Injection**: Automatic injection of other modules as dependencies
+- `Framework: Chain` - Reference to the Chain framework instance
+- `ModuleName: string` - Name of the current module
+- `IsServer: boolean` - True if running on server
+- `IsClient: boolean` - True if running on client
+- `Dependencies?: string[]` - Array of module dependencies
+- `Inject?: Record<string, string>` - Dependency injection mapping
 
-### Migration from Old System
+### Protected Methods
 
-If you have existing modules using the old pattern:
-
-**Old Pattern:**
+#### Logging
 ```typescript
-class MyModule extends BaseService {
-    Init() { /* ... */ }
-}
-export = MyModule;
+protected Log(level: number, message: string, metadata?: Record<string, unknown>)
+```
+Log messages with the module name automatically included.
+
+#### Event Bus
+```typescript
+protected Publish(topic: string, data: unknown)
+protected Subscribe(topic: string, callback: (message: any) => void)
+```
+Publish and subscribe to global events.
+
+#### State Management
+```typescript
+protected SetState<T>(key: string, value: T)
+protected GetState<T>(key: string): T | undefined
+```
+Manage local module state.
+
+#### Network Communication
+```typescript
+protected NetworkRequest<T, R>(channel: string, data: T, target?: Player): Promise<R>
+protected SendToServer(channel: string, data: unknown): boolean
+protected SendToClient(player: Player, channel: string, data: unknown): boolean
+protected SendToAllClients(channel: string, data: unknown): boolean
+protected ConnectToChannel<T>(channel: string, callback: (data: T) => void)
+```
+Bidirectional network communication methods.
+
+#### Environment Helpers
+```typescript
+protected ServerOnly<T>(fn: () => T): T | undefined
+protected ClientOnly<T>(fn: () => T): T | undefined
+```
+Execute code only on server or client respectively.
+
+### Lifecycle Methods
+
+```typescript
+Init?(): void        // Called during module initialization
+OnStart?(): void     // Called when module starts
+OnShutdown?(): void  // Called during module shutdown
 ```
 
-**New Pattern:**
+### Example: Chat System
+
 ```typescript
-export default class MyModule extends BaseService {
-    constructor(framework: Chain, moduleName: string) {
-        super(framework, moduleName);
+export default class ChatSystem extends Chain.link {
+    private messages: string[] = [];
+
+    Init() {
+        this.ServerOnly(() => {
+            // Server: Set up message handling
+            this.ConnectToChannel<{message: string, player: string}>("chat_message", (data) => {
+                this.BroadcastMessage(data.message, data.player);
+            });
+        });
+
+        this.ClientOnly(() => {
+            // Client: Set up UI
+            this.ConnectToChannel<{message: string, player: string}>("chat_broadcast", (data) => {
+                this.DisplayMessage(data.message, data.player);
+            });
+        });
     }
-    
-    Init() { /* ... */ }
+
+    // Server method
+    private BroadcastMessage(message: string, playerName: string) {
+        this.Log(1, `Broadcasting message from ${playerName}`);
+        this.SendToAllClients("chat_broadcast", { message, player: playerName });
+    }
+
+    // Client method
+    public SendMessage(message: string) {
+        this.SendToServer("chat_message", { 
+            message, 
+            player: "LocalPlayer" // In real implementation, get actual player name
+        });
+    }
+
+    // Client method
+    private DisplayMessage(message: string, playerName: string) {
+        this.messages.push(`${playerName}: ${message}`);
+        // Update UI here
+    }
 }
 ```
+
+### Benefits of Chain.link
+
+1. **Universal**: Works on both server and client with automatic detection
+2. **Unified API**: Single interface for all module types
+3. **Built-in Networking**: Bidirectional communication methods included
+4. **Environment Helpers**: Easy server/client-specific code execution
+5. **Full Framework Access**: All Chain framework features available
+6. **Type Safety**: Full TypeScript support with proper typing
+7. **Dependency Injection**: Automatic injection of other modules
+8. **Lifecycle Management**: Proper initialization and cleanup hooks
+
+### Migration from Architecture Classes
+
+If you're migrating from the old BaseService, BaseController, or SharedModule classes:
+
+**Before:**
+```typescript
+import { BaseService } from "../Architecture";
+
+export default class MyService extends BaseService {
+    // ...
+}
+```
+
+**After:**
+```typescript
+import { Chain } from "../Chain";
+
+export default class MyService extends Chain.link {
+    // Same code, but now works everywhere!
+}
+```
+
+The API is identical, but Chain.link provides more functionality and works in all environments.
 
 ## Module System
 
