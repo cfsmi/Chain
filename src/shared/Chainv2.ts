@@ -584,7 +584,9 @@ export class Chain {
     public GetStateHistory(): StateChange[] {
         return [...this.StateHistory];
     }
-
+    public ClearStateHistory() {
+        this.StateHistory.clear()
+    }
     /**
      * Restore state to a previous point in time
      */

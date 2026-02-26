@@ -1,5 +1,5 @@
 import { Chain } from "shared/Chainv2";
-
+print("Client is running")
 const framework = new Chain();
 framework.Init();
 
