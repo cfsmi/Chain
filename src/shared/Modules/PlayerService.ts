@@ -10,21 +10,17 @@ export default class PlayerService extends BaseService {
     private SampleService?: BaseService;
     private playerCount = 0;
 
-    constructor(framework: Chain, moduleName: string) {
-        super(framework, moduleName);
-    }
-
-    Init() {
+    public Init() {
         this.Log(1, "PlayerService initialized");
         this.SetState("playerCount", this.playerCount);
     }
 
-    OnStart() {
+    public OnStart() {
         this.Log(1, "PlayerService started");
         this.startPlayerCountUpdater();
     }
 
-    OnShutdown() {
+    public OnShutdown() {
         this.Log(1, "PlayerService shutting down");
     }
 

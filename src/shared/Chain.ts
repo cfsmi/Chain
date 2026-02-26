@@ -103,7 +103,7 @@ interface IModuleConstructor {
     new (framework: Chain, moduleName: string): IModule;
 }
 
-export enum LogLevel {
+enum LogLevel {
     DEBUG = 0,
     INFO = 1,
     WARN = 2,
