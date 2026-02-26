@@ -10,10 +10,6 @@ export default class ExampleController extends BaseController {
 
     private OtherController?: BaseController;
 
-    constructor(framework: Chain, moduleName: string) {
-        super(framework, moduleName);
-        this.framework = framework;
-    }
 
     public Init() {
         this.Log(1, "Controller initialized");
