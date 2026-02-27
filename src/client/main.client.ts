@@ -1,4 +1,4 @@
-import { Chain } from "shared/Chain";
+import { Chain } from "shared/Chain/ChainBundle";
 print("Client is running")
 const framework = new Chain();
 

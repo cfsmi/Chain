@@ -1,4 +1,4 @@
-import { Chain } from "../Chain";
+import { Chain } from "../ChainBundle";
 
 export default class GameManager extends Chain.link {
     Dependencies = ["ExamplePlayerService"];

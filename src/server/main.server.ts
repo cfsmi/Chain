@@ -1,4 +1,4 @@
-import { Chain } from "shared/Chain";
+import { Chain } from "shared/Chain/ChainBundle";
 import { ReplicatedStorage } from "@rbxts/services";
 print("Server is running")
 const ChainFramework = new Chain();
