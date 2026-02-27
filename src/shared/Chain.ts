@@ -1205,7 +1205,6 @@ export class Chain {
         OnStart?(): void;
         OnShutdown?(): void;
     };
-
     /**
      * Reset all mocks for clean testing
      */
@@ -1216,7 +1215,7 @@ export class Chain {
 }
 
 /**
- * Test Suite class for organizing tests
+ * Test Suite class for organizing tests, not sure why I made this tbh
  */
 class TestSuite {
     private tests: Array<{ name: string; fn: () => void | Promise<void> }> = [];

@@ -6,7 +6,7 @@ const framework = new Chain();
 framework.EnableStateSync(["playerCount", "gameMode"]);
 
 framework.Init();
-
+framework.Enchain()
 // Set local client state
 framework.SetState("localScore", 100);
 framework.SetState("playerName", "TestPlayer");
@@ -18,7 +18,7 @@ framework.SubscribeToState("localScore", (change) => {
 
 // Subscribe to server state changes
 framework.SubscribeToServerState("playerCount", (change) => {
-    print(`Player count updated: ${change.newValue}`);
+    print(`Player count updated: ${change.newValue}`, "on server");
 });
 
 // Request server state

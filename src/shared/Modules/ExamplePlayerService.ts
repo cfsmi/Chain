@@ -10,7 +10,6 @@ export default class PlayerService extends Chain.link {
     public Init() {
         this.Log(1, "PlayerService init");
         this.SetState("playerCount", this.playerCount);
-        
         // Subscribe to event bus
         this.Subscribe("player-joined", (message) => {
             const playerName = message.data as string;
