@@ -3,7 +3,7 @@ import { ReplicatedStorage } from "@rbxts/services";
 print("Server is running")
 const ChainFramework = new Chain();
 
-// Enable state sync BEFORE loading modules
+
 ChainFramework.EnableStateSync(["playerCount", "gameMode", "serverStatus"]);
 
 ChainFramework.LoadModules(ReplicatedStorage.FindFirstChild("TS")?.FindFirstChild("Modules")!);
