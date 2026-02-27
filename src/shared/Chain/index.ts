@@ -10,6 +10,3 @@ export * from './Modules/EventService';
 
 // Main framework
 export * from './Chain';
-
-// Legacy support - re-export the original Chain for backward compatibility
-export { Chain } from './ChainBundle';
