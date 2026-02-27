@@ -157,6 +157,7 @@ This class handles the main section of most of chains features
 export class Chain {
     private Modules = new Map<string, IModule>();
     private ModuleCache = new Map<string, IModule>();
+    private ModuleTasks = new Map<string, thread>();
     private NetworkQueue: Array<{ channel: string; data: unknown }> = [];
     private RateLimitMap = new Map<string, number>();
     private Network: RemoteEvent = new Instance("RemoteEvent");
@@ -201,6 +202,18 @@ export class Chain {
     private Started = false;
 
     constructor() {
+        if (RunService.IsServer()) {
+            this.NetworkFolder.Parent = script;
+        } else {
+            // Client: Wait for server's NetworkFolder to replicate
+            const serverFolder = script.WaitForChild("Folder", 10) as Folder;
+            if (serverFolder) {
+                this.NetworkFolder = serverFolder;
+            } else {
+                this.Log(LogLevel.WARN, "Failed to find server NetworkFolder", "TestChain");
+            }
+        }
+        
         // Handle both client and server events
         if (RunService.IsClient()) {
             this.Network.OnClientEvent.Connect((payload: string) => {
@@ -522,8 +535,8 @@ export class Chain {
         }
 
         try {
-            const response = await this.NetworkRequest<{ key: string }, { value: T }>("__getServerState", { key });
-            return response.value;
+            const response = (await this.GetRegisteredMethod<{ value: T }>("__getServerState", { key })) as { value: T };
+            return response?.value;
         } catch (error) {
             this.Log(LogLevel.ERROR, `Failed to request server state: ${error}`, "StateManager");
             return undefined;
@@ -720,11 +733,11 @@ export class Chain {
 
     public GetRegisteredMethod<R = unknown>(Id: string, args: unknown, target?: Player): Promise<R> | Callback | undefined {
         if (RunService.IsClient()) {
-            if (!this.NetworkFolder.FindFirstChild(Id)) {
+            const Remote = this.NetworkFolder.WaitForChild(Id, 10) as RemoteFunction;
+            if (!Remote) {
                 this.Log(LogLevel.WARN, `Method with id: ${Id} is not registered`, "TestChain");
                 return Promise.reject(`Method with id: ${Id} is not registered`) as Promise<R>;
             }
-            const Remote = this.NetworkFolder.FindFirstChild(Id) as RemoteFunction;
             return new Promise<R>((resolve, reject) => {
                 try {
                     const result = Remote.InvokeServer(args) as R;
@@ -773,11 +786,16 @@ export class Chain {
                     }
                     const startTime = tick();
                     try {
-                        const ModuleClass = require(child) as new (framework: Chain, moduleName: string) => IModule;
-                        if (typeOf(ModuleClass) !== "function") throw "Module must export a class constructor";
+                        const required = require(child) as unknown;
+                        const hasDefault = (required as Record<string, unknown>).default !== undefined;
+                        const ModuleClass = (hasDefault ? (required as Record<string, unknown>).default : required) as IModuleConstructor;
+                        
+                        if (typeOf(ModuleClass) !== "table" && typeOf(ModuleClass) !== "function") {
+                            throw "Module must export a class constructor";
+                        }
                         
                         // Automatically instantiate the module with framework and module name
-                        const moduleInstance = new ModuleClass(this, child.Name);
+                        const moduleInstance = (ModuleClass as unknown as { new: (framework: Chain, moduleName: string) => IModule }).new(this, child.Name);
                         if (typeOf(moduleInstance) !== "table") throw "Invalid module instance";
                         
                         this.Modules.set(child.Name, moduleInstance);
@@ -802,11 +820,10 @@ export class Chain {
      * Initialize modules with dependency injection and performance tracking
      */
     public Init(): Promise<Array<{ moduleName: string; error: string }>> {
-        if (!this.Loaded) this.Log(LogLevel.WARN, "Load modules before initializing!", "TestChain");
+        if (!this.Loaded && this.Modules.size() > 0) this.Log(LogLevel.WARN, "Load modules before initializing!", "TestChain");
         return new Promise((resolve) => {
             const errors: Array<{ moduleName: string; error: string }> = [];
             const initialized = new Set<string>();
-            this.NetworkFolder.Parent = script;
 
             const initModule = (name: string, module: IModule): boolean => {
                 if (initialized.has(name)) return true;
@@ -830,7 +847,7 @@ export class Chain {
 
                 const startTime = tick();
                 try {
-                    if (module.Init) module.Init();
+                    if (module.Init) (module.Init as unknown as (self: IModule) => void)(module);
                     const initTime = tick() - startTime;
                     const perf = this.ModulePerformance.get(name);
                     if (perf) perf.initTime = initTime;
@@ -850,46 +867,106 @@ export class Chain {
     }
 
     /**
-     * Start all modules
+     * Start all modules or a specific module
      */
-    public Enchain(): Promise<Array<{ moduleName: string; error: string }>> {
-        if (this.Started) return Promise.resolve([]);
+    public Enchain(moduleName?: string): Promise<Array<{ moduleName: string; error: string }>> {
+        if (this.Started && !moduleName) return Promise.resolve([]);
         return new Promise((resolve) => {
             const errors: Array<{ moduleName: string; error: string }> = [];
-            this.Modules.forEach((module, name) => {
-                const startTime = tick();
-                try {
-                    if (module.OnStart) module.OnStart();
-                    const execTime = tick() - startTime;
-                    const perf = this.ModulePerformance.get(name);
-                    if (perf) perf.startTime = execTime;
-                    this.Log(LogLevel.DEBUG, `Started module: ${name} (${math.floor(execTime * 1000)}ms)`, "TestChain");
-                } catch (e) {
-                    errors.push({ moduleName: name, error: tostring(e) });
-                    this.Log(LogLevel.ERROR, `Failed to start module: ${name} - ${e}`, "TestChain");
+            
+            if (moduleName) {
+                const module = this.Modules.get(moduleName);
+                if (!module) {
+                    errors.push({ moduleName, error: "Module not found" });
+                    resolve(errors);
+                    return;
                 }
-            });
-            this.Started = true;
+                
+                const moduleTask = task.spawn(() => {
+                    const startTime = tick();
+                    try {
+                        if (module.OnStart) (module.OnStart as unknown as (self: IModule) => void)(module);
+                        const execTime = tick() - startTime;
+                        const perf = this.ModulePerformance.get(moduleName);
+                        if (perf) perf.startTime = execTime;
+                        this.Log(LogLevel.DEBUG, `Started module: ${moduleName} (${math.floor(execTime * 1000)}ms)`, "TestChain");
+                    } catch (e) {
+                        errors.push({ moduleName, error: tostring(e) });
+                        this.Log(LogLevel.ERROR, `Failed to start module: ${moduleName} - ${e}`, "TestChain");
+                    }
+                });
+                this.ModuleTasks.set(moduleName, moduleTask);
+            } else {
+                this.Modules.forEach((module, name) => {
+                    const moduleTask = task.spawn(() => {
+                        const startTime = tick();
+                        try {
+                            if (module.OnStart) (module.OnStart as unknown as (self: IModule) => void)(module);
+                            const execTime = tick() - startTime;
+                            const perf = this.ModulePerformance.get(name);
+                            if (perf) perf.startTime = execTime;
+                            this.Log(LogLevel.DEBUG, `Started module: ${name} (${math.floor(execTime * 1000)}ms)`, "TestChain");
+                        } catch (e) {
+                            errors.push({ moduleName: name, error: tostring(e) });
+                            this.Log(LogLevel.ERROR, `Failed to start module: ${name} - ${e}`, "TestChain");
+                        }
+                    });
+                    this.ModuleTasks.set(name, moduleTask);
+                });
+                this.Started = true;
+            }
             resolve(errors);
         });
     }
 
     /**
-     * Shutdown all modules
+     * Shutdown all modules or a specific module
      */
-    public Shutdown(): Promise<Array<{ moduleName: string; error: string }>> {
+    public Shutdown(moduleName?: string): Promise<Array<{ moduleName: string; error: string }>> {
         return new Promise((resolve) => {
             const errors: Array<{ moduleName: string; error: string }> = [];
-            this.Modules.forEach((module, name) => {
-                try {
-                    if (module.OnShutdown) module.OnShutdown();
-                    this.Log(LogLevel.DEBUG, `Shutdown module: ${name}`, "TestChain");
-                } catch (e) {
-                    errors.push({ moduleName: name, error: tostring(e) });
-                    this.Log(LogLevel.ERROR, `Failed to shutdown module: ${name} - ${e}`, "TestChain");
+            
+            if (moduleName) {
+                const module = this.Modules.get(moduleName);
+                if (!module) {
+                    errors.push({ moduleName, error: "Module not found" });
+                    resolve(errors);
+                    return;
                 }
-            });
-            this.Started = false;
+                
+                try {
+                    if (module.OnShutdown) (module.OnShutdown as unknown as (self: IModule) => void)(module);
+                    this.Log(LogLevel.DEBUG, `Shutdown module: ${moduleName}`, "TestChain");
+                    
+                    // Cancel the module's task
+                    const moduleTask = this.ModuleTasks.get(moduleName);
+                    if (moduleTask) {
+                        coroutine.close(moduleTask);
+                        this.ModuleTasks.delete(moduleName);
+                    }
+                } catch (e) {
+                    errors.push({ moduleName, error: tostring(e) });
+                    this.Log(LogLevel.ERROR, `Failed to shutdown module: ${moduleName} - ${e}`, "TestChain");
+                }
+            } else {
+                this.Modules.forEach((module, name) => {
+                    try {
+                        if (module.OnShutdown) (module.OnShutdown as unknown as (self: IModule) => void)(module);
+                        this.Log(LogLevel.DEBUG, `Shutdown module: ${name}`, "TestChain");
+                        
+                        // Cancel the module's task
+                        const moduleTask = this.ModuleTasks.get(name);
+                        if (moduleTask) {
+                            coroutine.close(moduleTask);
+                            this.ModuleTasks.delete(name);
+                        }
+                    } catch (e) {
+                        errors.push({ moduleName: name, error: tostring(e) });
+                        this.Log(LogLevel.ERROR, `Failed to shutdown module: ${name} - ${e}`, "TestChain");
+                    }
+                });
+                this.Started = false;
+            }
             resolve(errors);
         });
     }
@@ -1078,7 +1155,7 @@ export class Chain {
             this.Framework.Publish(topic, data, this.ModuleName);
         }
 
-        protected Subscribe(topic: string, callback: (message: any) => void) {
+        protected Subscribe(topic: string, callback: (message: EventBusMessage) => void) {
             return this.Framework.Subscribe(topic, callback);
         }
 

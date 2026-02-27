@@ -21,23 +21,45 @@ Download this project, as long as you have roblox typescript setup, it should wo
 
 ```typescript
 import { Chain } from "./Chain";
+import { ReplicatedStorage } from "@rbxts/services";
 
-// Initialize Chain
+// Server-side setup
 const chain = new Chain();
 
-// Enable test mode for development
-chain.EnableTestMode();
-chain.SetLogLevel(1);
-
-// Load configuration
-chain.LoadConfig({
-    environment: "dev",
-});
+// Enable state sync BEFORE loading modules
+chain.EnableStateSync(["playerCount", "gameMode"]);
 
 // Load and initialize modules
-const loadErrors = chain.LoadModules(game.ReplicatedStorage.Modules);
+const loadErrors = chain.LoadModules(ReplicatedStorage.FindFirstChild("Modules")!);
+chain.SetLogLevel(1);
+
+// Set initial server state
+chain.SetServerState("playerCount", 0);
+chain.SetServerState("gameMode", "lobby");
+
 const initErrors = await chain.Init();
 const startErrors = await chain.Enchain();
+```
+
+```typescript
+import { Chain } from "./Chain";
+
+// Client-side setup
+const chain = new Chain();
+
+// Enable state sync for specific keys
+chain.EnableStateSync(["playerCount", "gameMode"]);
+
+chain.Init();
+
+// Request server state
+const gameMode = await chain.RequestServerState<string>("gameMode");
+print(`Current game mode: ${gameMode}`);
+
+// Subscribe to server state changes
+chain.SubscribeToServerState<number>("playerCount", (change) => {
+    print(`Player count: ${change.newValue}`);
+});
 ```
 
 ## Automatic Module Loading
@@ -46,14 +68,43 @@ The Chain framework automatically loads all modules and provides the necessary d
 
 ### How It Works
 
-1. **Automatic Instantiation**: When you call `ChainFramework.LoadModules()`, the framework automatically:
+1. **Automatic Instantiation**: When you call `Chain.LoadModules()`, the framework automatically:
    - Requires each ModuleScript
    - Instantiates the module class with `new ModuleClass(framework, moduleName)`
    - Provides the framework instance and module name automatically
 
-2. **Default Export Required**: Modules must use `export default class` instead of named exports or `export =`
+2. **Default Export Required**: Modules MUST use `export default class` instead of named exports or `export =`
+
+3. **Constructor**: The framework automatically calls the module's constructor with `(framework, moduleName)` parameters
 
 ### Module Template
+
+**IMPORTANT**: Modules must use `export default class` (not `export =` or named exports) for automatic loading.
+
+```typescript
+import { Chain } from "../Chain";
+
+export default class MyModule extends Chain.link {
+    Dependencies = ["OtherModule"];
+    Inject = {
+        OtherModule: "OtherModule"
+    };
+
+    private OtherModule?: typeof Chain.link;
+
+    Init() {
+        this.Log(1, "Module initialized");
+    }
+
+    OnStart() {
+        this.Log(1, "Module started");
+    }
+
+    OnShutdown() {
+        this.Log(1, "Module shutting down");
+    }
+}
+```
 ## Chain.link - Universal Module Template
 
 Chain.link is a unified module template that combines the functionality of services, controllers, and shared modules into a single, powerful base class. It automatically detects whether it's running on the server or client and provides appropriate functionality for both environments.
@@ -486,8 +537,8 @@ print(`Sent: ${stats.sent}, Received: ${stats.received}, Errors: ${stats.errors}
 #### Core Methods
 - `LoadModules(path: Instance)` - Load modules from instance hierarchy
 - `Init()` - Initialize all loaded modules with dependency injection
-- `Enchain()` - Start all initialized modules
-- `Shutdown()` - Shutdown all modules
+- `Enchain(moduleName?: string)` - Start all modules or a specific module (spawns in task.spawn)
+- `Shutdown(moduleName?: string)` - Shutdown all modules or a specific module (cancels task)
 
 #### Testing Methods
 - `EnableTestMode()` - Enable testing features and mocking
@@ -536,6 +587,7 @@ print(`Sent: ${stats.sent}, Received: ${stats.received}, Errors: ${stats.errors}
 - `GetModule<T>(name: string)` - Get loaded module instance
 - `GetNetworkStats()` - Get network usage statistics
 - `GetModulePerformance(module?: string)` - Get module performance data
+- `ResetMocks()` - Clear all module mocks (test mode only)
 
 ## License
 

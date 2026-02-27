@@ -2,18 +2,20 @@ import { Chain } from "shared/Chain";
 import { ReplicatedStorage } from "@rbxts/services";
 print("Server is running")
 const ChainFramework = new Chain();
-ChainFramework.LoadModules(ReplicatedStorage.FindFirstChild("Modules")!);
-ChainFramework.SetLogLevel(1)
-ChainFramework.Init();  // Injects dependencies & calls Init()
-ChainFramework.Enchain(); // Calls OnStart() on all modules
 
-// Enable state sync for specific keys
+// Enable state sync BEFORE loading modules
 ChainFramework.EnableStateSync(["playerCount", "gameMode", "serverStatus"]);
+
+ChainFramework.LoadModules(ReplicatedStorage.FindFirstChild("TS")?.FindFirstChild("Modules")!);
+ChainFramework.SetLogLevel(1)
 
 // Set initial server state
 ChainFramework.SetServerState("playerCount", 0);
 ChainFramework.SetServerState("gameMode", "lobby");
 ChainFramework.SetServerState("serverStatus", "running");
+
+ChainFramework.Init();  // Injects dependencies & calls Init()
+ChainFramework.Enchain(); // Calls OnStart() on all modules
 
 // Example: Update server state periodically
 let playerCount = 0;

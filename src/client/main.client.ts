@@ -1,10 +1,11 @@
 import { Chain } from "shared/Chain";
 print("Client is running")
 const framework = new Chain();
-framework.Init();
 
 // Enable state sync for specific keys
 framework.EnableStateSync(["playerCount", "gameMode"]);
+
+framework.Init();
 
 // Set local client state
 framework.SetState("localScore", 100);
