@@ -83,21 +83,39 @@ export interface IStateService {
     updateServerState<T>(key: string, value: T): void;
     getServerState<T>(key: string): T | undefined;
     getSyncedKeys(): string[];
+    getStateHistory(): StateChange[];
+    clearStateHistory(): void;
 }
 
 export interface INetworkService {
     sendToServer<T>(event: string, data: T): void;
     sendToClient<T>(player: any, event: string, data: T): void;
-    requestServerState<T>(key: string): Promise<T>;
+    sendToAllClients<T>(event: string, data: T): void;
+    request<T, R>(channel: string, data: T, timeout?: number, target?: any): Promise<R>;
+    fire(channel: string, data: unknown, target?: any): boolean;
+    connect<T>(channel: string, callback: (data: T) => void): { Disconnect(): void };
+    getStats(): { sent: number; received: number; errors: number };
 }
 
 export interface ILoggerService {
-    log(message: string, level: 'info' | 'warn' | 'error'): void;
+    log(message: string, level: 'info' | 'warn' | 'error', module?: string): void;
+    setLogLevel(level: LogLevel): void;
+    addModuleFilter(module: string): void;
+    debug(message: string, module?: string, metadata?: Record<string, unknown>): void;
+    info(message: string, module?: string, metadata?: Record<string, unknown>): void;
+    warn(message: string, module?: string, metadata?: Record<string, unknown>): void;
+    error(message: string, module?: string, metadata?: Record<string, unknown>): void;
+    getLogs(module?: string): LogEntry[];
+    clearLogs(module?: string): void;
 }
 
 export interface IEventService {
     emit<T>(event: string, data: T): void;
     on<T>(event: string, callback: (data: T) => void): () => void;
+    off(event: string, callback?: (data: any) => void): void;
+    once<T>(event: string, callback: (data: T) => void): () => void;
+    publish(topic: string, data: unknown, sender?: string): void;
+    subscribe(topic: string, callback: (message: EventBusMessage) => void, filter?: (data: unknown) => boolean): { Disconnect(): void };
 }
 
 export interface IChain {

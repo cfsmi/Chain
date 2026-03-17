@@ -53,7 +53,7 @@ export class ModularChain implements IChain {
 
     // Log level functionality
     SetLogLevel(level: number): void {
-        // Implementation depends on LoggerService
+        this.loggerService.setLogLevel(level as LogLevel);
         this.Log(`Log level set to: ${level}`, 'info');
     }
 
@@ -92,7 +92,7 @@ export class ModularChain implements IChain {
     }
 
     RequestServerState<T>(key: string): Promise<T> {
-        return this.networkService.requestServerState<T>(key);
+        return this.networkService.request<{ key: string }, T>("__getServerState", { key }) as Promise<T>;
     }
 
     // Event System
@@ -116,6 +116,64 @@ export class ModularChain implements IChain {
     // Logging
     Log(message: string, level: 'info' | 'warn' | 'error' = 'info'): void {
         this.loggerService.log(message, level);
+    }
+
+    // Additional ChainBundle features
+    GetModule<T extends IModule = IModule>(name: string): T | undefined {
+        return this.modules.get(name) as T | undefined;
+    }
+
+    Publish(topic: string, data: unknown, sender?: string): void {
+        this.eventService.publish(topic, data, sender);
+    }
+
+    Subscribe(topic: string, callback: (message: any) => void, filter?: (data: unknown) => boolean): { Disconnect(): void } {
+        return this.eventService.subscribe(topic, callback, filter);
+    }
+
+    ConnectToChannel<T = unknown>(channel: string, callback: (data: T) => void): { Disconnect(): void } {
+        return this.networkService.connect<T>(channel, callback);
+    }
+
+    FireNetwork(channel: string, data: unknown, target?: any): boolean {
+        return this.networkService.fire(channel, data, target);
+    }
+
+    SendToAllClients<T>(event: string, data: T): void {
+        this.networkService.sendToAllClients(event, data);
+    }
+
+    RegisterMethod(id: string, callback: Callback, isClient?: boolean): void {
+        (this.networkService as any).registerMethod(id, callback, isClient);
+    }
+
+    GetRegisteredMethod<R = unknown>(id: string, args: unknown, target?: any): Promise<R> | undefined {
+        const networkService = this.networkService as any;
+        return networkService.getRegisteredMethod(id, args, target) as Promise<R> | undefined;
+    }
+
+    GetNetworkStats() {
+        return this.networkService.getStats();
+    }
+
+    GetStateHistory() {
+        return this.stateService.getStateHistory();
+    }
+
+    ClearStateHistory() {
+        this.stateService.clearStateHistory();
+    }
+
+    GetLogs(module?: string) {
+        return this.loggerService.getLogs(module);
+    }
+
+    ClearLogs(module?: string) {
+        this.loggerService.clearLogs(module);
+    }
+
+    AddModuleFilter(module: string) {
+        this.loggerService.addModuleFilter(module);
     }
     
 
@@ -209,6 +267,36 @@ export class ModularChain implements IChain {
 
         protected On<T>(event: string, callback: (data: T) => void): () => void {
             return this.Framework.On(event, callback);
+        }
+
+        protected Publish(topic: string, data: unknown) {
+            this.Framework.Publish(topic, data, this.ModuleName);
+        }
+
+        protected Subscribe(topic: string, callback: (message: any) => void) {
+            return this.Framework.Subscribe(topic, callback);
+        }
+
+        protected ConnectToChannel<T>(channel: string, callback: (data: T) => void) {
+            return this.Framework.ConnectToChannel<T>(channel, callback);
+        }
+
+        protected SendToAllClients<T>(event: string, data: T): void {
+            this.Framework.SendToAllClients(event, data);
+        }
+
+        protected ServerOnly<T>(fn: () => T): T | undefined {
+            if (this.IsServer) {
+                return fn();
+            }
+            return undefined;
+        }
+
+        protected ClientOnly<T>(fn: () => T): T | undefined {
+            if (this.IsClient) {
+                return fn();
+            }
+            return undefined;
         }
 
         Init?(): void;

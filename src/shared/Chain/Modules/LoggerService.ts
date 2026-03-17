@@ -1,9 +1,9 @@
-import { LogLevel, LogEntry } from "../core/types";
+import { LogLevel, LogEntry, ILoggerService } from "../core/types";
 import { Service, Injectable } from "../core/di";
 
 @Service()
 @Injectable
-export class LoggerService {
+export class LoggerService implements ILoggerService {
     private logLevel: LogLevel = LogLevel.INFO;
     private moduleFilters = new Set<string>();
     private logBuffer = new Map<string, LogEntry[]>();
@@ -17,7 +17,16 @@ export class LoggerService {
         this.moduleFilters.add(module);
     }
 
-    log(level: LogLevel, message: string, module?: string, metadata?: Record<string, unknown>): void {
+    log(message: string, level: 'info' | 'warn' | 'error' = 'info', module?: string): void {
+        const logLevelMap = {
+            'info': LogLevel.INFO,
+            'warn': LogLevel.WARN,
+            'error': LogLevel.ERROR
+        };
+        this.logWithLevel(logLevelMap[level], message, module);
+    }
+
+    private logWithLevel(level: LogLevel, message: string, module?: string, metadata?: Record<string, unknown>): void {
         if (level < this.logLevel) return;
         if (module && this.moduleFilters.size() > 0 && !this.moduleFilters.has(module)) return;
 
@@ -34,19 +43,19 @@ export class LoggerService {
     }
 
     debug(message: string, module?: string, metadata?: Record<string, unknown>): void {
-        this.log(LogLevel.DEBUG, message, module, metadata);
+        this.logWithLevel(LogLevel.DEBUG, message, module, metadata);
     }
 
     info(message: string, module?: string, metadata?: Record<string, unknown>): void {
-        this.log(LogLevel.INFO, message, module, metadata);
+        this.logWithLevel(LogLevel.INFO, message, module, metadata);
     }
 
     warn(message: string, module?: string, metadata?: Record<string, unknown>): void {
-        this.log(LogLevel.WARN, message, module, metadata);
+        this.logWithLevel(LogLevel.WARN, message, module, metadata);
     }
 
     error(message: string, module?: string, metadata?: Record<string, unknown>): void {
-        this.log(LogLevel.ERROR, message, module, metadata);
+        this.logWithLevel(LogLevel.ERROR, message, module, metadata);
     }
 
     getLogs(module?: string): LogEntry[] {

@@ -1,7 +1,6 @@
 import { HttpService, RunService } from "@rbxts/services";
-import { NetworkRequest, NetworkResponse } from "../core/types";
-import { Service, Injectable, Inject } from "../core/di";
-import { LoggerService } from "./LoggerService";
+import { NetworkRequest, NetworkResponse, INetworkService } from "../core/types";
+import { Service, Injectable } from "../core/di";
 
 type Connection = {
     Disconnect(): void;
@@ -33,15 +32,14 @@ class Signal<T extends unknown[] = []> {
 
 @Service()
 @Injectable
-export class NetworkService {
-    @Inject(LoggerService) private logger!: LoggerService;
-    
+export class NetworkService implements INetworkService {
     private network: RemoteEvent = new Instance("RemoteEvent");
     private networkFolder: Folder = new Instance("Folder");
     private channels = new Map<string, Signal<[unknown]>>();
     private pendingRequests = new Map<string, { resolve: (value: unknown) => void; reject: (reason: string) => void; timeout: number }>();
     private rateLimitMap = new Map<string, number>();
     private networkStats = { sent: 0, received: 0, errors: 0 };
+    private registeredFunctions = new Map<string, Callback>();
     
     private readonly RATE_LIMIT = 10;
     private readonly RATE_WINDOW = 1000;
@@ -53,13 +51,18 @@ export class NetworkService {
 
     private setupNetwork(): void {
         if (RunService.IsServer()) {
+            this.networkFolder.Name = "NetworkFolder";
             this.networkFolder.Parent = script;
+            this.network.Name = "NetworkEvent";
+            this.network.Parent = this.networkFolder;
         } else {
-            const serverFolder = script.WaitForChild("Folder", 10) as Folder;
+            const serverFolder = script.WaitForChild("NetworkFolder", 10) as Folder;
             if (serverFolder) {
                 this.networkFolder = serverFolder;
-            } else {
-                this.logger.warn("Failed to find server NetworkFolder", "NetworkService");
+                const networkEvent = serverFolder.WaitForChild("NetworkEvent", 10) as RemoteEvent;
+                if (networkEvent) {
+                    this.network = networkEvent;
+                }
             }
         }
 
@@ -94,7 +97,7 @@ export class NetworkService {
             }
         } catch (error) {
             this.networkStats.errors++;
-            this.logger.error(`Network decode error: ${error}`, "NetworkService");
+            print(`[NetworkService] Network decode error: ${error}`);
         }
     }
 
@@ -146,7 +149,6 @@ export class NetworkService {
         const now = tick();
         const lastCall = this.rateLimitMap.get(channel) ?? 0;
         if (now - lastCall < this.RATE_WINDOW / this.RATE_LIMIT) {
-            this.logger.debug(`Rate limited: ${channel}`, "NetworkService");
             return false;
         }
         this.rateLimitMap.set(channel, now);
@@ -167,7 +169,7 @@ export class NetworkService {
             this.networkStats.sent++;
             return true;
         } catch (error) {
-            this.logger.error(`Network fire failed: ${error}`, "NetworkService");
+            print(`[NetworkService] Network fire failed: ${error}`);
             this.networkStats.errors++;
             return false;
         }
@@ -178,6 +180,80 @@ export class NetworkService {
             this.channels.set(channel, new Signal<[unknown]>());
         }
         return this.channels.get(channel)!.Connect(callback as (data: unknown) => void);
+    }
+
+    sendToServer<T>(event: string, data: T): void {
+        if (!RunService.IsClient()) {
+            print("[NetworkService] SendToServer can only be called on client");
+            return;
+        }
+        this.fire(event, data);
+    }
+
+    sendToClient<T>(player: Player, event: string, data: T): void {
+        if (!RunService.IsServer()) {
+            print("[NetworkService] SendToClient can only be called on server");
+            return;
+        }
+        this.fire(event, data, player);
+    }
+
+    sendToAllClients<T>(event: string, data: T): void {
+        if (!RunService.IsServer()) {
+            print("[NetworkService] SendToAllClients can only be called on server");
+            return;
+        }
+        this.fire(event, data);
+    }
+
+    registerMethod(id: string, callback: Callback, isClient?: boolean): void {
+        if (RunService.IsServer()) {
+            if (this.networkFolder.FindFirstChild(id)) {
+                print(`[NetworkService] Method with id: ${id} is already registered`);
+                return;
+            }
+            this.registeredFunctions.set(id, callback);
+            
+            if (isClient) {
+                const remoteFunction = new Instance("RemoteFunction");
+                remoteFunction.Name = id;
+                remoteFunction.OnServerInvoke = (player: Player, ...args: unknown[]) => {
+                    return callback(player, ...args);
+                };
+                remoteFunction.Parent = this.networkFolder;
+            }
+        }
+    }
+
+    getRegisteredMethod<R = unknown>(id: string, args: unknown, target?: Player): Promise<R> | undefined {
+        if (RunService.IsClient()) {
+            const remote = this.networkFolder.WaitForChild(id, 10) as RemoteFunction;
+            if (!remote) {
+                print(`[NetworkService] Method with id: ${id} is not registered`);
+                return Promise.reject(`Method with id: ${id} is not registered`) as Promise<R>;
+            }
+            return new Promise<R>((resolve, reject) => {
+                try {
+                    const result = remote.InvokeServer(args) as R;
+                    resolve(result);
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        } else if (RunService.IsServer() && target) {
+            const remote = this.networkFolder.FindFirstChild(id) as RemoteFunction;
+            if (remote) {
+                return new Promise<R>((resolve, reject) => {
+                    try {
+                        const result = remote.InvokeClient(target, args) as R;
+                        resolve(result);
+                    } catch (error) {
+                        reject(error);
+                    }
+                });
+            }
+        }
+        return undefined;
     }
 
     getStats() {

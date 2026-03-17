@@ -8,14 +8,23 @@ export class StateService implements IStateService {
     private stateSubscriptions = new Map<string, Set<StateChangeCallback<any>>>();
     private serverStateSubscriptions = new Map<string, Set<StateChangeCallback<any>>>();
     private syncedKeys = new Set<string>();
+    private stateHistory: StateChange[] = [];
 
     setState<T>(key: string, value: T): void {
         const oldValue = this.localState.get(key);
         this.localState.set(key, value);
         
+        const change: StateChange<T> = { 
+            key, 
+            oldValue: oldValue as T, 
+            newValue: value,
+            timestamp: tick()
+        };
+        
+        this.stateHistory.push(change);
+        
         const callbacks = this.stateSubscriptions.get(key);
         if (callbacks) {
-            const change: StateChange<T> = { key, oldValue: oldValue as T, newValue: value };
             callbacks.forEach(callback => callback(change));
         }
     }
@@ -54,9 +63,15 @@ export class StateService implements IStateService {
         const oldValue = this.serverState.get(key);
         this.serverState.set(key, value);
         
+        const change: StateChange<T> = { 
+            key, 
+            oldValue: oldValue as T, 
+            newValue: value,
+            timestamp: tick()
+        };
+        
         const callbacks = this.serverStateSubscriptions.get(key);
         if (callbacks) {
-            const change: StateChange<T> = { key, oldValue: oldValue as T, newValue: value };
             callbacks.forEach(callback => callback(change));
         }
     }
@@ -67,5 +82,13 @@ export class StateService implements IStateService {
 
     getSyncedKeys(): string[] {
         return Array.from(this.syncedKeys);
+    }
+
+    getStateHistory(): StateChange[] {
+        return [...this.stateHistory];
+    }
+
+    clearStateHistory(): void {
+        this.stateHistory = [];
     }
 }

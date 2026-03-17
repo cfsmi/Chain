@@ -13,7 +13,6 @@ ChainFramework.SetLogLevel(1)
 ChainFramework.SetServerState("playerCount", 0);
 ChainFramework.SetServerState("gameMode", "lobby");
 ChainFramework.SetServerState("serverStatus", "running");
-
 ChainFramework.Init();  // Injects dependencies & calls Init()
 ChainFramework.Enchain(); // Calls OnStart() on all modules
 

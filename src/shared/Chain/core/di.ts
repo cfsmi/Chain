@@ -38,7 +38,7 @@ export class DIContainer {
 
         // Auto-resolve constructors
         if (typeof token === "function") {
-            const dependencies = this.getDependencies(token);
+            const dependencies = this.getDependencies(token as Constructor);
             const resolvedDeps = dependencies.map(dep => this.resolve(dep));
             return new (token as Constructor<T>)(...resolvedDeps);
         }
@@ -65,16 +65,6 @@ export function Inject<T>(token: ServiceToken<T>) {
             const existingTokens = (target[DEPENDENCIES_METADATA] as ServiceToken[]) || [];
             existingTokens[parameterIndex] = token;
             target[DEPENDENCIES_METADATA] = existingTokens;
-        } else {
-            // Property decorator
-            Object.defineProperty(target, propertyKey!, {
-                get: function() {
-                    const container = (this as any).__container as DIContainer;
-                    return container?.resolve(token);
-                },
-                enumerable: true,
-                configurable: true
-            });
         }
     };
 }

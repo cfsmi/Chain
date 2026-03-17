@@ -1,17 +1,18 @@
 # Chain Framework
 
-A powerful, feature-rich framework for Roblox TypeScript development with advanced module management, testing capabilities, and comprehensive debugging tools.
+A powerful, modular framework for Roblox TypeScript development with advanced module management, dependency injection, state synchronization, and comprehensive debugging tools.
 
 ## Features
 
-- **Module Management** - Dependency injection, lifecycle management, and performance tracking
-- **Network Layer** - Type-safe networking with rate limiting and timeout handling
-- **Testing Suite** - Built-in testing framework with mocking capabilities
-- **State Management** - Reactive state with history tracking and time-travel debugging
+- **Modular Architecture** - Clean separation of concerns with dependency injection
+- **Module Management** - Automatic loading, lifecycle management, and performance tracking
+- **Network Layer** - Type-safe bidirectional networking with rate limiting and timeout handling
+- **State Management** - Reactive local and server state with automatic synchronization
 - **Event Bus** - Global publish/subscribe system with filtering
-- **Configuration** - Dynamic configuration management with watchers
+- **RPC System** - Remote procedure calls with RegisterMethod/GetRegisteredMethod
 - **Logging** - Multi-level logging system with filtering and metadata
-- **Debugging** - Performance monitoring and comprehensive error tracking
+- **Testing Suite** - Built-in testing framework with mocking capabilities (ChainBundle)
+- **Debugging** - Performance monitoring, state history, and comprehensive error tracking
 
 ## Installation
 
@@ -278,10 +279,13 @@ const response = await chain.NetworkRequest<RequestData, ResponseData>(
     5000 // timeout in ms
 );
 
-// Register server methods
+// Register server methods (RPC)
 chain.RegisterMethod("getUserData", (player: Player, data: any) => {
     return { id: data.userId, name: "Player" };
 }, true);
+
+// Call registered method from client
+const userData = await chain.GetRegisteredMethod<UserData>("getUserData", { userId: 123 });
 ```
 
 ### Channel Communication
@@ -294,6 +298,22 @@ const connection = chain.ConnectToChannel<MessageData>("chat", (data) => {
 
 // Fire network event
 chain.FireNetwork("chat", { message: "Hello World!" });
+
+// Send to specific client (server-side)
+chain.SendToClient(player, "notification", { text: "Welcome!" });
+
+// Send to all clients (server-side)
+chain.SendToAllClients("announcement", { text: "Server restart in 5 minutes" });
+
+// Send to server (client-side)
+chain.SendToServer("playerAction", { action: "jump" });
+```
+
+### Network Statistics
+
+```typescript
+const stats = chain.GetNetworkStats();
+print(`Sent: ${stats.sent}, Received: ${stats.received}, Errors: ${stats.errors}`);
 ```
 
 ## Testing Framework
@@ -417,10 +437,12 @@ serverConnection.Disconnect();
 ```typescript
 // Get state history
 const history = chain.GetStateHistory();
+history.forEach(change => {
+    print(`${change.key}: ${change.oldValue} → ${change.newValue} at ${change.timestamp}`);
+});
 
-// Restore state to previous point (test mode only)
-const previousTime = tick() - 10;
-chain.RestoreState(previousTime);
+// Clear state history
+chain.ClearStateHistory();
 ```
 
 ## Event Bus
