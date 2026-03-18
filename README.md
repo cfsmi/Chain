@@ -84,25 +84,25 @@ The Chain framework automatically loads all modules and provides the necessary d
 
 ```typescript
 import { Chain } from "../Chain";
+import OtherModule from "./OtherModule";
 
 export default class MyModule extends Chain.link {
-    Dependencies = ["OtherModule"];
     Inject = {
-        OtherModule: "OtherModule"
+        otherModule: OtherModule,
     };
 
-    private OtherModule?: typeof Chain.link;
+    private otherModule!: OtherModule;
 
     Init() {
-        this.Log(1, "Module initialized");
+        this.Log("Module initialized");
     }
 
     OnStart() {
-        this.Log(1, "Module started");
+        this.Log("Module started");
     }
 
     OnShutdown() {
-        this.Log(1, "Module shutting down");
+        this.Log("Module shutting down");
     }
 }
 ```
@@ -114,37 +114,37 @@ Chain.link is a unified module template that combines the functionality of servi
 
 ```typescript
 import { Chain } from "../Chain";
+import OtherModule from "./OtherModule";
 
 export default class MyModule extends Chain.link {
-    Dependencies = ["OtherModule"];
     Inject = {
-        OtherModule: "OtherModule"
+        otherModule: OtherModule,
     };
 
-    private OtherModule?: typeof Chain.link;
+    private otherModule!: OtherModule;
 
     Init() {
-        this.Log(1, "Module initialized");
+        this.Log("Module initialized");
         
         // Server-only initialization
         this.ServerOnly(() => {
-            this.Log(1, "Server-side initialization");
+            this.Log("Server-side initialization");
             this.SetupServerLogic();
         });
 
         // Client-only initialization
         this.ClientOnly(() => {
-            this.Log(1, "Client-side initialization");
+            this.Log("Client-side initialization");
             this.SetupClientUI();
         });
     }
 
     OnStart() {
-        this.Log(1, "Module started");
+        this.Log("Module started");
     }
 
     OnShutdown() {
-        this.Log(1, "Module shutting down");
+        this.Log("Module shutting down");
     }
 
     private SetupServerLogic() {
@@ -163,14 +163,13 @@ export default class MyModule extends Chain.link {
 - `ModuleName: string` - Name of the current module
 - `IsServer: boolean` - True if running on server
 - `IsClient: boolean` - True if running on client
-- `Dependencies?: string[]` - Array of module dependencies
-- `Inject?: Record<string, string>` - Dependency injection mapping
+- `Inject?: Record<string, ModuleConstructor>` - Dependency injection map (constructor references)
 
 ### Protected Methods
 
 #### Logging
 ```typescript
-protected Log(level: number, message: string, metadata?: Record<string, unknown>)
+protected Log(message: string, level?: 'info' | 'warn' | 'error')
 ```
 Log messages with the module name automatically included.
 
@@ -237,7 +236,7 @@ export default class ChatSystem extends Chain.link {
 
     // Server method
     private BroadcastMessage(message: string, playerName: string) {
-        this.Log(1, `Broadcasting message from ${playerName}`);
+        this.Log(`Broadcasting message from ${playerName}`);
         this.SendToAllClients("chat_broadcast", { message, player: playerName });
     }
 
@@ -245,7 +244,7 @@ export default class ChatSystem extends Chain.link {
     public SendMessage(message: string) {
         this.SendToServer("chat_message", { 
             message, 
-            player: "LocalPlayer" // In real implementation, get actual player name
+            player: "LocalPlayer"
         });
     }
 
@@ -345,14 +344,14 @@ print(`Tests: ${results.passed}/${results.total} passed`);
 // Enable test mode
 chain.EnableTestMode();
 
-// Mock a module
+// Mock a module by passing its constructor
 const mockDataService = {
     Init: () => {},
     GetUserData: (id: number) => ({ id, name: `MockUser${id}` }),
     SaveUserData: (data: any) => true
 };
 
-chain.MockModule("DataService", mockDataService);
+chain.MockModule(DataService, mockDataService);
 
 // Reset mocks
 chain.ResetMocks();
@@ -505,12 +504,9 @@ enum LogLevel {
 // Set log level
 chain.SetLogLevel(LogLevel.INFO);
 
-// Log messages
-chain.Log(LogLevel.INFO, "Application started", "Main");
-chain.Log(LogLevel.ERROR, "Connection failed", "NetworkService", { 
-    endpoint: "api.example.com",
-    timeout: 5000 
-});
+// Log messages (from framework instance)
+chain.Log("Application started", 'info');
+chain.Log("Connection failed", 'error');
 ```
 
 ### Log Filtering
@@ -606,10 +602,9 @@ print(`Sent: ${stats.sent}, Received: ${stats.received}, Errors: ${stats.errors}
 - `ClearLogs(module?: string)` - Clear logs for module or all logs
 
 #### Utility Methods
-- `GetModule<T>(name: string)` - Get loaded module instance
+- `GetModule<T>(ctorOrName: Constructor | string)` - Get loaded module instance by constructor (preferred) or name
 - `GetNetworkStats()` - Get network usage statistics
 - `GetModulePerformance(module?: string)` - Get module performance data
-- `ResetMocks()` - Clear all module mocks (test mode only)
 
 ## License
 

@@ -90,12 +90,15 @@ class Signal<T extends unknown[] = []> {
     }
 }
 
+type ModuleConstructor = new (...args: never[]) => unknown;
+
 interface IModule {
     Init?: () => void;
     OnStart?: () => void;
     OnShutdown?: () => void;
+    /** @deprecated Use Inject — Dependencies is now derived automatically */
     Dependencies?: string[];
-    Inject?: Record<string, string>;
+    Inject?: Record<string, ModuleConstructor>;
     [key: string]: unknown;
 }
 
@@ -156,6 +159,7 @@ This class handles the main section of most of chains features
 */
 export class Chain {
     private Modules = new Map<string, IModule>();
+    private ModulesByClass = new Map<ModuleConstructor, IModule>();
     private ModuleCache = new Map<string, IModule>();
     private ModuleTasks = new Map<string, thread>();
     private NetworkQueue: Array<{ channel: string; data: unknown }> = [];
@@ -173,7 +177,7 @@ export class Chain {
     private PendingRequests = new Map<string, { resolve: (value: unknown) => void; reject: (reason: string) => void; timeout: number }>();
     private NetworkStats = { sent: 0, received: 0, errors: 0 };
     private ModulePerformance = new Map<string, { initTime: number; startTime: number }>();
-    private MockedModules = new Map<string, IModule>();
+    private MockedModules = new Map<ModuleConstructor, IModule>();
     private TestMode = false;
     
     // Event Bus
@@ -346,24 +350,29 @@ export class Chain {
     }
 
     /**
-     * Mock a module for testing
+     * Mock a module for testing. Pass the class constructor as the key:
+     *   chain.MockModule(DataService, { GetPlayerData: () => ({}) })
      */
-    public MockModule<T extends IModule>(name: string, mockModule: T) {
+    public MockModule<T extends IModule>(ctor: ModuleConstructor, mockModule: T) {
         if (!this.TestMode) {
             this.Log(LogLevel.WARN, "Mocking modules outside test mode", "TestChain");
         }
-        this.MockedModules.set(name, mockModule);
-        this.Log(LogLevel.DEBUG, `Mocked module: ${name}`, "TestChain");
+        this.MockedModules.set(ctor, mockModule);
+        this.Log(LogLevel.DEBUG, `Mocked module: ${tostring(ctor)}`, "TestChain");
     }
 
     /**
-     * Get module with mock support
+     * Get a module by constructor reference (type-safe) or by name string.
+     *   chain.GetModule(DataService)  // preferred
+     *   chain.GetModule("DataService") // still works
      */
-    public GetModule<T extends IModule = IModule>(name: string): T | undefined {
-        if (this.TestMode && this.MockedModules.has(name)) {
-            return this.MockedModules.get(name) as T;
+    public GetModule<T extends IModule = IModule>(ctorOrName: ModuleConstructor | string): T | undefined {
+        if (typeOf(ctorOrName) === "function") {
+            const ctor = ctorOrName as ModuleConstructor;
+            if (this.TestMode && this.MockedModules.has(ctor)) return this.MockedModules.get(ctor) as T;
+            return this.ModulesByClass.get(ctor) as T | undefined;
         }
-
+        const name = ctorOrName as string;
         if (this.ModuleCache.has(name)) return this.ModuleCache.get(name) as T;
         const module = this.Modules.get(name) as T | undefined;
         if (!module) {
@@ -799,6 +808,7 @@ export class Chain {
                         if (typeOf(moduleInstance) !== "table") throw "Invalid module instance";
                         
                         this.Modules.set(child.Name, moduleInstance);
+                        this.ModulesByClass.set(ModuleClass as unknown as ModuleConstructor, moduleInstance);
                         const loadTime = tick() - startTime;
                         this.ModulePerformance.set(child.Name, { initTime: 0, startTime: loadTime });
                         this.Log(LogLevel.DEBUG, `Loaded and instantiated module: ${child.Name} (${math.floor(loadTime * 1000)}ms)`, "TestChain");
@@ -827,38 +837,14 @@ export class Chain {
 
             const initModule = (name: string, module: IModule): boolean => {
                 if (initialized.has(name)) return true;
-                
-                if (module.Dependencies) {
-                    for (const dep of module.Dependencies) {
-                        const depModule = this.Modules.get(dep);
-                        if (!depModule) {
-                            errors.push({ moduleName: name, error: `Missing dependency: ${dep}` });
-                            return false;
-                        }
-                        if (!initModule(dep, depModule)) return false;
-                    }
-                }
-
-                const injectionError = this.InjectDependencies(name, module);
-                if (injectionError) {
-                    errors.push(injectionError);
+                const err = this.initModuleByName(name, module, initialized);
+                if (err) {
+                    errors.push(err);
+                    this.Log(LogLevel.ERROR, `Failed to initialize module: ${name} - ${err.error}`, "TestChain");
                     return false;
                 }
-
-                const startTime = tick();
-                try {
-                    if (module.Init) (module.Init as unknown as (self: IModule) => void)(module);
-                    const initTime = tick() - startTime;
-                    const perf = this.ModulePerformance.get(name);
-                    if (perf) perf.initTime = initTime;
-                    initialized.add(name);
-                    this.Log(LogLevel.DEBUG, `Initialized module: ${name} (${math.floor(initTime * 1000)}ms)`, "TestChain");
-                    return true;
-                } catch (e) {
-                    errors.push({ moduleName: name, error: tostring(e) });
-                    this.Log(LogLevel.ERROR, `Failed to initialize module: ${name} - ${e}`, "TestChain");
-                    return false;
-                }
+                this.Log(LogLevel.DEBUG, `Initialized module: ${name}`, "TestChain");
+                return true;
             };
 
             this.Modules.forEach((module, name) => initModule(name, module));
@@ -972,20 +958,55 @@ export class Chain {
     }
 
     /**
-     * Inject dependencies into a module
+     * Inject dependencies into a module using constructor references.
+     * Also auto-initializes any injected dependency that hasn't been initialized yet.
      */
-    private InjectDependencies(name: string, module: IModule): { moduleName: string; error: string } | undefined {
+    private InjectDependencies(name: string, module: IModule, initialized: Set<string>): { moduleName: string; error: string } | undefined {
         if (!module.Inject) return;
         const injections = new Map<string, unknown>();
-        for (const [key, depName] of pairs(module.Inject)) {
-            const depModule = this.TestMode && this.MockedModules.has(depName) 
-                ? this.MockedModules.get(depName)
-                : this.Modules.get(depName);
-            if (!depModule) return { moduleName: name, error: `Injection failed: ${depName} not found` };
+        for (const [key, ctor] of pairs(module.Inject as Record<string, ModuleConstructor>)) {
+            const depModule = this.TestMode && this.MockedModules.has(ctor)
+                ? this.MockedModules.get(ctor)
+                : this.ModulesByClass.get(ctor);
+            if (!depModule) {
+                return { moduleName: name, error: `Injection failed: constructor ${tostring(ctor)} not found — is the module loaded?` };
+            }
+            // Ensure the dependency is initialized before we hand it over
+            const depName = this.getModuleName(depModule);
+            if (depName && !initialized.has(depName)) {
+                const depError = this.initModuleByName(depName, depModule, initialized);
+                if (depError) return depError;
+            }
             module[key] = depModule;
-            injections.set(key, depModule);
+            injections.set(key as string, depModule);
         }
         this.InjectionCache.set(name, injections);
+    }
+
+    private getModuleName(module: IModule): string | undefined {
+        for (const [name, m] of this.Modules) {
+            if (m === module) return name;
+        }
+    }
+
+    private initModuleByName(
+        name: string,
+        module: IModule,
+        initialized: Set<string>
+    ): { moduleName: string; error: string } | undefined {
+        if (initialized.has(name)) return;
+        const injectionError = this.InjectDependencies(name, module, initialized);
+        if (injectionError) return injectionError;
+        const startTime = tick();
+        try {
+            if (module.Init) (module.Init as unknown as (self: IModule) => void)(module);
+            const initTime = tick() - startTime;
+            const perf = this.ModulePerformance.get(name);
+            if (perf) perf.initTime = initTime;
+            initialized.add(name);
+        } catch (e) {
+            return { moduleName: name, error: tostring(e) };
+        }
     }
 
     /**
@@ -1136,8 +1157,9 @@ export class Chain {
         protected ModuleName: string;
         protected IsServer: boolean;
         protected IsClient: boolean;
+        /** @deprecated Use Inject — Dependencies is now derived automatically */
         Dependencies?: string[];
-        Inject?: Record<string, string>;
+        Inject?: Record<string, ModuleConstructor>;
         [key: string]: unknown;
 
         constructor(framework: Chain, moduleName: string) {
@@ -1212,6 +1234,9 @@ export class Chain {
         this.MockedModules.clear();
         this.Log(LogLevel.DEBUG, "All mocks reset", "TestChain");
     }
+
+    /** @hidden used by InjectDependencies */
+    private _modulesByClass() { return this.ModulesByClass; }
 }
 
 /**

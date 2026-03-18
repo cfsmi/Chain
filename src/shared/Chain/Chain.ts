@@ -1,5 +1,5 @@
 import { DIContainer, Injectable, Inject } from "./core/di";
-import { IChain, IStateService, INetworkService, ILoggerService, IEventService, IModule, LogLevel } from "./core/types";
+import { IChain, IStateService, INetworkService, ILoggerService, IEventService, IModule, ModuleConstructor, LogLevel } from "./core/types";
 import { StateService } from "./Modules/StateService";
 import { NetworkService } from "./Modules/NetworkService";
 import { LoggerService } from "./Modules/LoggerService";
@@ -10,6 +10,7 @@ import { RunService } from "@rbxts/services";
 export class ModularChain implements IChain {
     private container: DIContainer;
     private modules = new Map<string, IModule>();
+    private modulesByClass = new Map<ModuleConstructor, IModule>();
     private loaded = false;
     private started = false;
 
@@ -38,6 +39,7 @@ export class ModularChain implements IChain {
                         
                         const moduleInstance = new ModuleClass(this, child.Name);
                         this.modules.set(child.Name, moduleInstance);
+                        this.modulesByClass.set(ModuleClass as unknown as ModuleConstructor, moduleInstance);
                         this.Log(`Loaded module: ${child.Name}`, 'info');
                     } catch (e) {
                         this.Log(`Failed to load module: ${child.Name} - ${e}`, 'error');
@@ -118,9 +120,11 @@ export class ModularChain implements IChain {
         this.loggerService.log(message, level);
     }
 
-    // Additional ChainBundle features
-    GetModule<T extends IModule = IModule>(name: string): T | undefined {
-        return this.modules.get(name) as T | undefined;
+    GetModule<T extends IModule = IModule>(ctorOrName: ModuleConstructor | string): T | undefined {
+        if (typeOf(ctorOrName) === "function") {
+            return this.modulesByClass.get(ctorOrName as ModuleConstructor) as T | undefined;
+        }
+        return this.modules.get(ctorOrName as string) as T | undefined;
     }
 
     Publish(topic: string, data: unknown, sender?: string): void {
@@ -182,19 +186,41 @@ export class ModularChain implements IChain {
         if (!this.loaded && this.modules.size() > 0) {
             this.Log("Load modules before initializing!", 'warn');
         }
-        
-        // Initialize loaded modules
-        this.modules.forEach((module, name) => {
+
+        const initialized = new Set<string>();
+
+        const initModule = (name: string, module: IModule) => {
+            if (initialized.has(name)) return;
+            if (module.Inject) {
+                for (const [key, ctor] of pairs(module.Inject as Record<string, ModuleConstructor>)) {
+                    const dep = this.modulesByClass.get(ctor);
+                    if (!dep) {
+                        this.Log(`Injection failed for ${name}: ${tostring(ctor)} not found`, 'error');
+                        return;
+                    }
+                    const depName = this.getModuleName(dep);
+                    if (depName) initModule(depName, dep);
+                    module[key] = dep;
+                }
+            }
             try {
                 if (module.Init) module.Init();
+                initialized.add(name);
                 this.Log(`Initialized module: ${name}`, 'info');
             } catch (e) {
                 this.Log(`Failed to initialize module: ${name} - ${e}`, 'error');
             }
-        });
-        
+        };
+
+        this.modules.forEach((module, name) => initModule(name, module));
         this.loggerService.log("Modular Chain framework initialized", 'info');
         this.eventService.emit('framework:init', {});
+    }
+
+    private getModuleName(module: IModule): string | undefined {
+        for (const [name, m] of this.modules) {
+            if (m === module) return name;
+        }
     }
 
     Enchain(): void {
@@ -233,6 +259,10 @@ export class ModularChain implements IChain {
         protected ModuleName: string;
         protected IsServer: boolean;
         protected IsClient: boolean;
+        /** @deprecated Dependencies is now derived automatically from Inject */
+        Dependencies?: string[];
+        Inject?: Record<string, ModuleConstructor>;
+        [key: string]: unknown;
 
         constructor(framework: ModularChain, moduleName: string) {
             this.Framework = framework;

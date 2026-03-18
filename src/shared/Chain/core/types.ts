@@ -51,10 +51,16 @@ export interface Config {
 export type Constructor<T = {}> = new (...args: any[]) => T;
 export type ServiceToken<T = any> = Constructor<T> | string | symbol;
 
+export type ModuleConstructor = new (...args: never[]) => unknown;
+
 export interface IModule {
     Init?(): void;
     OnStart?(): void;
     OnShutdown?(): void;
+    /** @deprecated Dependencies is now derived automatically from Inject */
+    Dependencies?: string[];
+    Inject?: Record<string, ModuleConstructor>;
+    [key: string]: unknown;
 }
 
 // Decorator metadata
