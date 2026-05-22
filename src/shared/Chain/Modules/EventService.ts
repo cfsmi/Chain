@@ -2,7 +2,7 @@ import { Injectable } from "../core/di";
 import { IEventService, EventBusMessage } from "../core/types";
 
 type EventCallback<T = any> = (data: T) => void;
-type Connection = { Disconnect(): void };
+type Connection = { Disconnect: () => void };
 
 @Injectable
 export class EventService implements IEventService {

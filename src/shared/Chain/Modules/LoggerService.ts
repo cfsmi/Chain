@@ -65,7 +65,9 @@ export class LoggerService implements ILoggerService {
         
         const allLogs: LogEntry[] = [];
         for (const [, logs] of this.logBuffer) {
-            allLogs.push(...logs);
+            for (let i = 0; i < logs.size(); i++) {
+                allLogs.push(logs[i]);
+            }
         }
         
         // Manual sort for roblox-ts compatibility

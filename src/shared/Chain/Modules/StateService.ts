@@ -81,7 +81,11 @@ export class StateService implements IStateService {
     }
 
     getSyncedKeys(): string[] {
-        return Array.from(this.syncedKeys);
+        const keys: string[] = [];
+        for (const key of this.syncedKeys) {
+            keys.push(key);
+        }
+        return keys;
     }
 
     getStateHistory(): StateChange[] {

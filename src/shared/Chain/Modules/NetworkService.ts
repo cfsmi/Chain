@@ -3,7 +3,7 @@ import { NetworkRequest, NetworkResponse, INetworkService } from "../core/types"
 import { Service, Injectable } from "../core/di";
 
 type Connection = {
-    Disconnect(): void;
+    Disconnect: () => void;
 };
 
 class Signal<T extends unknown[] = []> {

@@ -1,5 +1,5 @@
 import { DIContainer, Injectable, Inject } from "./core/di";
-import { IChain, IStateService, INetworkService, ILoggerService, IEventService, IModule, ModuleConstructor, LogLevel } from "./core/types";
+import { IChain, IStateService, INetworkService, ILoggerService, IEventService, IModule, ModuleConstructor, LogLevel, StateChangeCallback } from "./core/types";
 import { StateService } from "./Modules/StateService";
 import { NetworkService } from "./Modules/NetworkService";
 import { LoggerService } from "./Modules/LoggerService";
@@ -81,11 +81,11 @@ export class ModularChain implements IChain {
         return this.stateService.getState<T>(key);
     }
 
-    SubscribeToState<T>(key: string, callback: (change: any) => void): () => void {
+    SubscribeToState<T>(key: string, callback: StateChangeCallback<T>): () => void {
         return this.stateService.subscribeToState(key, callback);
     }
 
-    SubscribeToServerState<T>(key: string, callback: (change: any) => void): () => void {
+    SubscribeToServerState<T>(key: string, callback: StateChangeCallback<T>): () => void {
         return this.stateService.subscribeToServerState(key, callback);
     }
 
@@ -148,12 +148,13 @@ export class ModularChain implements IChain {
     }
 
     RegisterMethod(id: string, callback: Callback, isClient?: boolean): void {
-        (this.networkService as any).registerMethod(id, callback, isClient);
+        const networkService = this.networkService as unknown as { registerMethod(id: string, callback: Callback, isClient?: boolean): void };
+        networkService.registerMethod(id, callback, isClient);
     }
 
     GetRegisteredMethod<R = unknown>(id: string, args: unknown, target?: any): Promise<R> | undefined {
-        const networkService = this.networkService as any;
-        return networkService.getRegisteredMethod(id, args, target) as Promise<R> | undefined;
+        const networkService = this.networkService as unknown as { getRegisteredMethod(id: string, args: unknown, target?: any): Promise<R> | undefined };
+        return networkService.getRegisteredMethod(id, args, target);
     }
 
     GetNetworkStats() {
@@ -204,7 +205,8 @@ export class ModularChain implements IChain {
                 }
             }
             try {
-                if (module.Init) module.Init();
+                const initFn = module.Init as (() => void) | undefined;
+                if (initFn) initFn();
                 initialized.add(name);
                 this.Log(`Initialized module: ${name}`, 'info');
             } catch (e) {
@@ -229,7 +231,8 @@ export class ModularChain implements IChain {
         // Start loaded modules
         this.modules.forEach((module, name) => {
             try {
-                if (module.OnStart) module.OnStart();
+                const startFn = module.OnStart as (() => void) | undefined;
+                if (startFn) startFn();
                 this.Log(`Started module: ${name}`, 'info');
             } catch (e) {
                 this.Log(`Failed to start module: ${name} - ${e}`, 'error');
@@ -244,7 +247,8 @@ export class ModularChain implements IChain {
     Shutdown(): void {
         this.modules.forEach((module, name) => {
             try {
-                if (module.OnShutdown) module.OnShutdown();
+                const shutdownFn = module.OnShutdown as (() => void) | undefined;
+                if (shutdownFn) shutdownFn();
                 this.Log(`Shutdown module: ${name}`, 'info');
             } catch (e) {
                 this.Log(`Failed to shutdown module: ${name} - ${e}`, 'error');

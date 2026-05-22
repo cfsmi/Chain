@@ -48,8 +48,8 @@ export interface Config {
 }
 
 // Type-safe dependency injection
-export type Constructor<T = {}> = new (...args: any[]) => T;
-export type ServiceToken<T = any> = Constructor<T> | string | symbol;
+export type Constructor<T = {}> = new (...args: unknown[]) => T;
+export type ServiceToken<T = unknown> = Constructor<T> | string | symbol;
 
 export type ModuleConstructor = new (...args: never[]) => unknown;
 
@@ -127,8 +127,8 @@ export interface IEventService {
 export interface IChain {
     SetState<T>(key: string, value: T): void;
     GetState<T>(key: string): T | undefined;
-    SubscribeToState<T>(key: string, callback: (change: any) => void): () => void;
-    SubscribeToServerState<T>(key: string, callback: (change: any) => void): () => void;
+    SubscribeToState<T>(key: string, callback: StateChangeCallback<T>): () => void;
+    SubscribeToServerState<T>(key: string, callback: StateChangeCallback<T>): () => void;
     EnableStateSync(keys: string[]): void;
     RequestServerState<T>(key: string): Promise<T>;
     Emit<T>(event: string, data: T): void;
